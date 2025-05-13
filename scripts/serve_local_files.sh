@@ -15,7 +15,11 @@ FIND_CMD="find ${INPUT_DIR} -type f"
 if [ -z "$WILDCARD" ]; then
   echo "Files wildcard is not set. Serve all files in ${INPUT_DIR}..."
 else
-  FIND_CMD="${FIND_CMD} -name ${WILDCARD}"
+  FIND_CMD="${FIND_CMD} \\( "
+  for ext in ${WILDCARD}; do
+    FIND_CMD="${FIND_CMD} -iname \"$ext\" -o"
+  done
+  FIND_CMD="${FIND_CMD% -o} \\)"
 fi
 
 echo "Replacing ${INPUT_DIR} to http://localhost:${PORT} ..."
@@ -26,6 +30,18 @@ green=`tput setaf 2`
 reset=`tput sgr0`
 echo "${green}File list stored in '${OUTPUT_FILE}'. Now import it directly from Label Studio UI${reset}"
 
-echo "Running web server on the port ${PORT}"
+echo "Running web server on the port ${PORT} with CORS enabled"
 cd $INPUT_DIR
-python3 -m http.server $PORT
+python3 -c "
+import http.server, socketserver
+
+class CORSRequestHandler(http.server.SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        super().end_headers()
+
+port = $PORT
+with socketserver.TCPServer(('', port), CORSRequestHandler) as httpd:
+    print(f'Serving with CORS on port {port}...')
+    httpd.serve_forever()
+"
